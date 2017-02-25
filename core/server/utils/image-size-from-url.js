@@ -19,7 +19,7 @@ var sizeOf       = require('image-size'),
     Promise      = require('bluebird'),
     http         = require('http'),
     https        = require('https'),
-    utils        = require('../utils'),
+    config       = require('../config'),
     dimensions,
     request,
     requestHandler;
@@ -45,7 +45,7 @@ module.exports.getImageSizeFromUrl = function getImageSizeFromUrl(imagePath, tim
                 imagePath = 'http:' + imagePath;
             } else {
                 // get absolute url for image
-                imagePath = utils.url.urlFor('image', {image: imagePath}, true);
+                imagePath = config.urlFor('image', {image: imagePath}, true);
             }
         }
 

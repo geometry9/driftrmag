@@ -3,49 +3,50 @@ var _      = require('lodash'),
     path   = require('path'),
     hbs    = require('express-hbs'),
     api    = require('../api'),
-    settingsCache = api.settings.cache,
     config = require('../config'),
-    utils = require('../utils'),
-    logging = require('../logging'),
     errors = require('../errors'),
-    utils = require('../utils'),
-    i18n = require('../i18n'),
+    i18n   = require('../i18n'),
     themeHandler;
 
 themeHandler = {
+    // ### GhostLocals Middleware
+    // Expose the standard locals that every external page should have available,
+    // separating between the theme and the admin
+    ghostLocals: function ghostLocals(req, res, next) {
+        // Make sure we have a locals value.
+        res.locals = res.locals || {};
+        res.locals.version = config.ghostVersion;
+        res.locals.safeVersion = config.ghostVersion.match(/^(\d+\.)?(\d+)/)[0];
+        // relative path from the URL
+        res.locals.relativeUrl = req.path;
+
+        next();
+    },
+
     // ### configHbsForContext Middleware
     // Setup handlebars for the current context (admin or theme)
     configHbsForContext: function configHbsForContext(req, res, next) {
-        var themeData = {
-                title: settingsCache.get('title'),
-                description: settingsCache.get('description'),
-                url: utils.url.urlFor('home', {secure: req.secure}, true),
-                facebook: settingsCache.get('facebook'),
-                twitter: settingsCache.get('twitter'),
-                timezone: settingsCache.get('activeTimezone'),
-                navigation: settingsCache.get('navigation'),
-                posts_per_page: settingsCache.get('postsPerPage'),
-                icon: settingsCache.get('icon'),
-                cover: settingsCache.get('cover'),
-                logo: settingsCache.get('logo'),
-                amp: settingsCache.get('amp')
-            },
-            labsData = _.cloneDeep(settingsCache.get('labs')),
+        var themeData = _.cloneDeep(config.theme),
+            labsData = _.cloneDeep(config.labs),
             blogApp = req.app;
 
-        hbs.updateTemplateOptions({
-            data: {
-                blog: themeData,
-                labs: labsData
-            }
-        });
+        if (req.secure && config.urlSSL) {
+            // For secure requests override .url property with the SSL version
+            themeData.url = config.urlSSL.replace(/\/$/, '');
+        }
 
-        if (config.getContentPath('themes') && blogApp.get('activeTheme')) {
-            blogApp.set('views', path.join(config.getContentPath('themes'), blogApp.get('activeTheme')));
+        // Change camelCase to snake_case
+        themeData.posts_per_page = themeData.postsPerPage;
+        delete themeData.postsPerPage;
+
+        hbs.updateTemplateOptions({data: {blog: themeData, labs: labsData}});
+
+        if (config.paths.themePath && blogApp.get('activeTheme')) {
+            blogApp.set('views', path.join(config.paths.themePath, blogApp.get('activeTheme')));
         }
 
         // Pass 'secure' flag to the view engine
-        // so that templates can choose to render https or http 'url', see url utility
+        // so that templates can choose 'url' vs 'urlSSL'
         res.locals.secure = req.secure;
 
         next();
@@ -55,7 +56,7 @@ themeHandler = {
     // Helper for updateActiveTheme
     activateTheme: function activateTheme(blogApp, activeTheme) {
         var hbsOptions,
-            themePartials = path.join(config.getContentPath('themes'), activeTheme, 'partials');
+            themePartials = path.join(config.paths.themePath, activeTheme, 'partials');
 
         // clear the view cache
         blogApp.cache = {};
@@ -64,7 +65,7 @@ themeHandler = {
 
         // set view engine
         hbsOptions = {
-            partialsDir: [config.get('paths').helperTemplates],
+            partialsDir: [config.paths.helperTemplates],
             onCompile: function onCompile(exhbs, source) {
                 return exhbs.handlebars.compile(source, {preventIndent: true});
             }
@@ -78,6 +79,9 @@ themeHandler = {
         });
 
         blogApp.engine('hbs', hbs.express3(hbsOptions));
+
+        // Update user error template
+        errors.updateActiveTheme(activeTheme);
 
         // Set active theme variable on the express server
         blogApp.set('activeTheme', activeTheme);
@@ -96,18 +100,18 @@ themeHandler = {
             // Check if the theme changed
             if (activeTheme.value !== blogApp.get('activeTheme')) {
                 // Change theme
-                if (!config.get('paths').availableThemes.hasOwnProperty(activeTheme.value)) {
+                if (!config.paths.availableThemes.hasOwnProperty(activeTheme.value)) {
                     if (!res.isAdmin) {
-                        return next(new errors.NotFoundError({
-                            message: i18n.t('errors.middleware.themehandler.missingTheme', {theme: activeTheme.value})
-                        }));
+                        // Throw an error if the theme is not available, but not on the admin UI
+                        return errors.throwError(i18n.t('errors.middleware.themehandler.missingTheme', {theme: activeTheme.value}));
                     } else {
                         // At this point the activated theme is not present and the current
                         // request is for the admin client.  In order to allow the user access
                         // to the admin client we set an hbs instance on the app so that middleware
                         // processing can continue.
                         blogApp.engine('hbs', hbs.express3());
-                        logging.warn(i18n.t('errors.middleware.themehandler.missingTheme', {theme: activeTheme.value}));
+                        errors.logWarn(i18n.t('errors.middleware.themehandler.missingTheme', {theme: activeTheme.value}));
+
                         return next();
                     }
                 } else {

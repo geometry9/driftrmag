@@ -3,7 +3,7 @@
 var Promise          = require('bluebird'),
     exporter         = require('../data/export'),
     importer         = require('../data/importer'),
-    backupDatabase   = require('../data/db/backup'),
+    backupDatabase   = require('../data/migration').backupDatabase,
     models           = require('../models'),
     errors           = require('../errors'),
     utils            = require('./utils'),
@@ -37,8 +37,8 @@ db = {
         function exportContent() {
             return exporter.doExport().then(function (exportedData) {
                 return {db: [exportedData]};
-            }).catch(function (err) {
-                return Promise.reject(new errors.GhostError({err: err}));
+            }).catch(function (error) {
+                return Promise.reject(new errors.InternalServerError(error.message || error));
             });
         }
 
@@ -100,8 +100,8 @@ db = {
             return Promise.each(collections, function then(Collection) {
                 return Collection.invokeThen('destroy');
             }).return({db: []})
-            .catch(function (err) {
-                throw new errors.GhostError({err: err});
+            .catch(function (error) {
+                throw new errors.InternalServerError(error.message || error);
             });
         }
 

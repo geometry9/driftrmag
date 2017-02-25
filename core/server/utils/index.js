@@ -105,13 +105,7 @@ utils = {
 
     readCSV: require('./read-csv'),
     removeOpenRedirectFromUrl: require('./remove-open-redirect-from-url'),
-    zipFolder: require('./zip-folder'),
-    readThemes: require('./read-themes'),
-    generateAssetHash: require('./asset-hash'),
-    url: require('./url'),
-    tokens: require('./tokens'),
-    sequence: require('./sequence'),
-    ghostVersion: require('./ghost-version')
+    zipFolder: require('./zip-folder')
 };
 
 module.exports = utils;

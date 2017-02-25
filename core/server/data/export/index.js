@@ -1,13 +1,13 @@
-var _ = require('lodash'),
-    Promise = require('bluebird'),
-    db = require('../../data/db'),
-    commands = require('../schema').commands,
+var _           = require('lodash'),
+    Promise     = require('bluebird'),
+    db          = require('../../data/db'),
+    commands    = require('../schema').commands,
+    versioning  = require('../schema').versioning,
     serverUtils = require('../../utils'),
-    ghostVersion = require('../../utils/ghost-version'),
     errors      = require('../../errors'),
-    logging     = require('../../logging'),
     settings    = require('../../api/settings'),
     i18n        = require('../../i18n'),
+
     excludedTables = ['accesstokens', 'refreshtokens', 'clients', 'client_trusted_domains'],
     modelOptions = {context: {internal: true}},
 
@@ -29,15 +29,15 @@ exportFileName = function exportFileName() {
         }
         return title + 'ghost.' + datetime + '.json';
     }).catch(function (err) {
-        logging.error(new errors.GhostError({err: err}));
+        errors.logError(err);
         return 'ghost.' + datetime + '.json';
     });
 };
 
 getVersionAndTables = function getVersionAndTables() {
     var props = {
-        version: ghostVersion.full,
-        tables: commands.getTables()
+        version: versioning.getDatabaseVersion(),
+        tables:  commands.getTables()
     };
 
     return Promise.props(props);
@@ -74,10 +74,7 @@ doExport = function doExport() {
 
         return exportData;
     }).catch(function (err) {
-        return Promise.reject(new errors.DataExportError({
-            err: err,
-            context: i18n.t('errors.data.export.errorExportingData')
-        }));
+        errors.logAndThrowError(err, i18n.t('errors.data.export.errorExportingData'), '');
     });
 };
 

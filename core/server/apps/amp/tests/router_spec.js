@@ -37,15 +37,14 @@ describe('AMP Controller', function () {
             route: {path: '/'},
             query: {r: ''},
             params: {},
-            amp: {}
+            body: {}
         };
 
-        defaultPath = path.join(configUtils.config.get('paths').appRoot, '/core/server/apps/amp/lib/views/amp.hbs');
+        defaultPath = path.join(configUtils.config.paths.appRoot, '/core/server/apps/amp/lib/views/amp.hbs');
 
         configUtils.set({
             theme: {
-                permalinks: '/:slug/',
-                amp: true
+                permalinks: '/:slug/'
             }
         });
     });
@@ -149,7 +148,7 @@ describe('AMP getPostData', function () {
         };
 
         req = {
-            amp: {
+            body: {
                 post: {}
             }
         };
@@ -166,7 +165,8 @@ describe('AMP getPostData', function () {
         postLookupStub.returns(new Promise.resolve({
             post: {
                 id: '1',
-                slug: 'welcome-to-ghost'
+                slug: 'welcome-to-ghost',
+                isAmpURL: true
             }
         }));
 
@@ -175,16 +175,16 @@ describe('AMP getPostData', function () {
         ampController.getPostData(req, res, function () {
             req.body.post.should.be.eql({
                     id: '1',
-                    slug: 'welcome-to-ghost'
+                    slug: 'welcome-to-ghost',
+                    isAmpURL: true
                 }
             );
             done();
         });
     });
-
     it('should return error if postlookup returns NotFoundError', function (done) {
         postLookupStub = sandbox.stub();
-        postLookupStub.returns(new Promise.reject(new errors.NotFoundError({message: 'not found'})));
+        postLookupStub.returns(new Promise.reject(new errors.NotFoundError('not found')));
 
         ampController.__set__('postLookup', postLookupStub);
 
@@ -196,7 +196,7 @@ describe('AMP getPostData', function () {
             err.message.should.be.eql('not found');
             err.statusCode.should.be.eql(404);
             err.errorType.should.be.eql('NotFoundError');
-            req.body.should.be.eql({});
+            req.body.post.should.be.eql({});
             done();
         });
     });
@@ -209,7 +209,7 @@ describe('AMP getPostData', function () {
         ampController.getPostData(req, res, function (err) {
             should.exist(err);
             err.should.be.eql('not found');
-            req.body.should.be.eql({});
+            req.body.post.should.be.eql({});
             done();
         });
     });

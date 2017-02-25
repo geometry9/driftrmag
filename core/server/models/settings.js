@@ -1,5 +1,6 @@
 var Settings,
     ghostBookshelf = require('./base'),
+    uuid           = require('uuid'),
     _              = require('lodash'),
     errors         = require('../errors'),
     Promise        = require('bluebird'),
@@ -45,6 +46,7 @@ Settings = ghostBookshelf.Model.extend({
 
     defaults: function defaults() {
         return {
+            uuid: uuid.v4(),
             type: 'core'
         };
     },
@@ -53,22 +55,24 @@ Settings = ghostBookshelf.Model.extend({
         events.emit('settings' + '.' + event, this);
     },
 
-    onDestroyed: function onDestroyed(model) {
-        model.emitChange('deleted');
-        model.emitChange(model.attributes.key + '.' + 'deleted');
+    initialize: function initialize() {
+        ghostBookshelf.Model.prototype.initialize.apply(this, arguments);
+
+        this.on('created', function (model) {
+            model.emitChange('added');
+            model.emitChange(model.attributes.key + '.' + 'added');
+        });
+        this.on('updated', function (model) {
+            model.emitChange('edited');
+            model.emitChange(model.attributes.key + '.' + 'edited');
+        });
+        this.on('destroyed', function (model) {
+            model.emitChange('deleted');
+            model.emitChange(model.attributes.key + '.' + 'deleted');
+        });
     },
 
-    onCreated: function onCreated(model) {
-        model.emitChange('added');
-        model.emitChange(model.attributes.key + '.' + 'added');
-    },
-
-    onUpdated: function onUpdated(model) {
-        model.emitChange('edited');
-        model.emitChange(model.attributes.key + '.' + 'edited');
-    },
-
-    onValidate: function onValidate() {
+    validate: function validate(model, attributes, options) {
         var self = this,
             setting = this.toJSON();
 
@@ -77,7 +81,7 @@ Settings = ghostBookshelf.Model.extend({
         }).then(function () {
             var themeName = setting.value || '';
 
-            if (setting.key !== 'activeTheme') {
+            if (setting.key !== 'activeTheme' || options.importing) {
                 return;
             }
 
@@ -110,7 +114,7 @@ Settings = ghostBookshelf.Model.extend({
             // Accept an array of models as input
             if (item.toJSON) { item = item.toJSON(); }
             if (!(_.isString(item.key) && item.key.length > 0)) {
-                return Promise.reject(new errors.ValidationError({message: i18n.t('errors.models.settings.valueCannotBeBlank')}));
+                return Promise.reject(new errors.ValidationError(i18n.t('errors.models.settings.valueCannotBeBlank')));
             }
 
             item = self.filterData(item);
@@ -134,14 +138,14 @@ Settings = ghostBookshelf.Model.extend({
                     return setting.save(saveData, options);
                 }
 
-                return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.models.settings.unableToFindSetting', {key: item.key})}));
-            });
+                return Promise.reject(new errors.NotFoundError(i18n.t('errors.models.settings.unableToFindSetting', {key: item.key})));
+            }, errors.logAndThrowError);
         });
     },
 
     populateDefault: function (key) {
         if (!getDefaultSettings()[key]) {
-            return Promise.reject(new errors.NotFoundError({message: i18n.t('errors.models.settings.unableToFindDefaultSetting', {key: key})}));
+            return Promise.reject(new errors.NotFoundError(i18n.t('errors.models.settings.unableToFindDefaultSetting', {key: key})));
         }
 
         return this.findOne({key: key}).then(function then(foundSetting) {
@@ -167,6 +171,10 @@ Settings = ghostBookshelf.Model.extend({
 
             _.each(getDefaultSettings(), function each(defaultSetting, defaultSettingKey) {
                 var isMissingFromDB = usedKeys.indexOf(defaultSettingKey) === -1;
+                // Temporary code to deal with old databases with currentVersion settings
+                if (defaultSettingKey === 'databaseVersion' && usedKeys.indexOf('currentVersion') !== -1) {
+                    isMissingFromDB = false;
+                }
                 if (isMissingFromDB) {
                     defaultSetting.value = defaultSetting.defaultValue;
                     insertOperations.push(Settings.forge(defaultSetting).save(null, options));

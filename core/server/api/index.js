@@ -7,8 +7,6 @@
 var _              = require('lodash'),
     Promise        = require('bluebird'),
     config         = require('../config'),
-    models         = require('../models'),
-    utils          = require('../utils'),
     configuration  = require('./configuration'),
     db             = require('./db'),
     mail           = require('./mail'),
@@ -18,7 +16,6 @@ var _              = require('lodash'),
     roles          = require('./roles'),
     settings       = require('./settings'),
     tags           = require('./tags'),
-    invites        = require('./invites'),
     clients        = require('./clients'),
     users          = require('./users'),
     slugs          = require('./slugs'),
@@ -34,7 +31,17 @@ var _              = require('lodash'),
     cacheInvalidationHeader,
     locationHeader,
     contentDispositionHeaderExport,
-    contentDispositionHeaderSubscribers;
+    contentDispositionHeaderSubscribers,
+    init;
+
+/**
+ * ### Init
+ * Initialise the API - populate the settings cache
+ * @return {Promise(Settings)} Resolves to Settings Collection
+ */
+init = function init() {
+    return settings.updateSettingsCache();
+};
 
 function isActiveThemeOverride(method, endpoint, result) {
     return method === 'POST' && endpoint === 'themes' && result.themes && result.themes[0] && result.themes[0].active === true;
@@ -66,9 +73,9 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
 
     if (isActiveThemeOverride(method, endpoint, result)) {
         // Special case for if we're overwriting an active theme
-        // @TODO: remove this crazy DIRTY HORRIBLE HACK
+        // @TODO: remove these crazy DIRTY HORRIBLE HACKSSS
         req.app.set('activeTheme', null);
-        config.set('assetHash', null);
+        config.assetHash = null;
         return INVALIDATE_ALL;
     } else if (['POST', 'PUT', 'DELETE'].indexOf(method) > -1) {
         if (endpoint === 'schedules' && subdir === 'posts') {
@@ -93,7 +100,7 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
             if (hasStatusChanged || wasPublishedUpdated) {
                 return INVALIDATE_ALL;
             } else {
-                return utils.url.urlFor({relativeUrl: utils.url.urlJoin('/', config.get('routeKeywords').preview, post.uuid, '/')});
+                return config.urlFor({relativeUrl: '/' + config.routeKeywords.preview + '/' + post.uuid + '/'});
             }
         }
     }
@@ -111,25 +118,23 @@ cacheInvalidationHeader = function cacheInvalidationHeader(req, result) {
  * @return {String} Resolves to header string
  */
 locationHeader = function locationHeader(req, result) {
-    var apiRoot = utils.url.urlFor('api'),
+    var apiRoot = config.urlFor('api'),
         location,
-        newObject,
-        statusQuery;
+        newObject;
 
     if (req.method === 'POST') {
         if (result.hasOwnProperty('posts')) {
             newObject = result.posts[0];
-            statusQuery = '/?status=' + newObject.status;
-            location = utils.url.urlJoin(apiRoot, 'posts', newObject.id, statusQuery);
+            location = apiRoot + '/posts/' + newObject.id + '/?status=' + newObject.status;
         } else if (result.hasOwnProperty('notifications')) {
             newObject = result.notifications[0];
-            location = utils.url.urlJoin(apiRoot, 'notifications', newObject.id, '/');
+            location = apiRoot + '/notifications/' + newObject.id + '/';
         } else if (result.hasOwnProperty('users')) {
             newObject = result.users[0];
-            location = utils.url.urlJoin(apiRoot, 'users', newObject.id, '/');
+            location = apiRoot + '/users/' + newObject.id + '/';
         } else if (result.hasOwnProperty('tags')) {
             newObject = result.tags[0];
-            location = utils.url.urlJoin(apiRoot, 'tags', newObject.id, '/');
+            location = apiRoot + '/tags/' + newObject.id + '/';
         }
     }
 
@@ -220,12 +225,10 @@ http = function http(apiMethod) {
     return function apiHandler(req, res, next) {
         // We define 2 properties for using as arguments in API calls:
         var object = req.body,
-            options = _.extend({}, req.file, {ip: req.ip}, req.query, req.params, {
+            options = _.extend({}, req.file, req.query, req.params, {
                 context: {
-                    // @TODO: forward the client and user obj in 1.0 (options.context.user.id)
-                    user: ((req.user && req.user.id) || (req.user && models.User.isExternalUser(req.user.id))) ? req.user.id : null,
-                    client: (req.client && req.client.slug) ? req.client.slug : null,
-                    client_id: (req.client && req.client.id) ? req.client.id : null
+                    user: ((req.user && req.user.id) || (req.user && req.user.id === 0)) ? req.user.id : null,
+                    client: (req.client && req.client.slug) ? req.client.slug : null
                 }
             });
 
@@ -267,6 +270,8 @@ http = function http(apiMethod) {
  * ## Public API
  */
 module.exports = {
+    // Extras
+    init: init,
     http: http,
     // API Endpoints
     configuration: configuration,
@@ -285,8 +290,7 @@ module.exports = {
     authentication: authentication,
     uploads: uploads,
     slack: slack,
-    themes: themes,
-    invites: invites
+    themes: themes
 };
 
 /**

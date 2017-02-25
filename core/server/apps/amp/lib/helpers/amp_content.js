@@ -11,11 +11,9 @@ var hbs                  = require('express-hbs'),
     Amperize             = require('amperize'),
     moment               = require('moment'),
     sanitizeHtml         = require('sanitize-html'),
-    logging              = require('../../../../logging'),
-    i18n                 = require('../../../../i18n'),
+    config               = require('../../../../config'),
     errors               = require('../../../../errors'),
     makeAbsoluteUrl      = require('../../../../utils/make-absolute-urls'),
-    utils                = require('../../../../utils'),
     cheerio              = require('cheerio'),
     amperize             = new Amperize(),
     amperizeCache        = {},
@@ -121,20 +119,16 @@ function getAmperizeHTML(html, post) {
     }
 
     // make relative URLs abolute
-    html = makeAbsoluteUrl(html, utils.url.urlFor('home', true), post.url).html();
+    html = makeAbsoluteUrl(html, config.url, post.url).html();
 
     if (!amperizeCache[post.id] || moment(new Date(amperizeCache[post.id].updated_at)).diff(new Date(post.updated_at)) < 0) {
         return new Promise(function (resolve) {
             amperize.parse(html, function (err, res) {
                 if (err) {
                     if (err.src) {
-                        logging.error(new errors.GhostError({
-                            err: err,
-                            context: 'AMP HTML couldn\'t get parsed: ' + err.src,
-                            help: i18n.t('errors.apps.appWillNotBeLoaded.help')
-                        }));
+                        errors.logError(err.message, 'AMP HTML couldn\'t get parsed: ' + err.src);
                     } else {
-                        logging.error(new errors.GhostError({err: err}));
+                        errors.logError(err);
                     }
 
                     // save it in cache to prevent multiple calls to Amperize until

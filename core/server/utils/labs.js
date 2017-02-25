@@ -1,8 +1,9 @@
-var settingsCache = require('../api/settings').cache,
+var config = require('../config'),
     flagIsSet;
 
 flagIsSet = function flagIsSet(flag) {
-    var labsConfig = settingsCache.get('labs');
+    var labsConfig = config.labs;
+
     return labsConfig && labsConfig[flag] && labsConfig[flag] === true;
 };
 
